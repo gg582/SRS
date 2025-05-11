@@ -1,29 +1,31 @@
 from flask import Flask, jsonify
-from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
+from extensions import db   # ← 여기로 이동
 import os
 
 # Flask 앱 생성
 app = Flask(__name__)
 CORS(app)
 
-# SQLite 데이터베이스 경로 설정
+# DB 설정
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 DB_PATH = os.path.join(BASE_DIR, '../database/app.db')
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + DB_PATH
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-# SQLAlchemy 객체 생성
-db = SQLAlchemy(app)
+db.init_app(app)  # ← 여기서 db와 app을 연결
 
-# 간단한 테스트 라우트
+# 테스트 라우트
 @app.route('/')
 def home():
     return jsonify({"message": "Hello from Seat Reservation System!"})
 
-# 앱 실행
-if __name__ == '__main__':
-    app.run(debug=True)
-
-# 모델 임포트 (app.py 맨 아래쪽에 추가)
+# 모델 및 라우트 등록
 from models import user, seat, reservation
+from routes import register_routes
+register_routes(app)
+
+# 실행
+if __name__ == '__main__':
+    print("🚀 서버 실행 중...")
+    app.run(debug=True)

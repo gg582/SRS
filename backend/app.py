@@ -25,7 +25,15 @@ from models import user, seat, reservation
 from routes import register_routes
 register_routes(app)
 
+from flask import send_from_directory
+
+@app.route('/frontend')
+def frontend_page():
+    return send_from_directory('static', 'index.html')
+
 # 실행
 if __name__ == '__main__':
     print("🚀 서버 실행 중...")
     app.run(debug=True)
+
+

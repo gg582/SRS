@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8">
-  <title>좌석 예약 시스템</title>
+  <title>Firebase 인증 좌석 예약 시스템</title>
   <style>
     body { font-family: Arial, sans-serif; padding: 20px; }
     .seat { display: inline-block; width: 60px; height: 60px; margin: 5px; text-align: center;
@@ -11,22 +11,52 @@
     .reserved { background-color: tomato; cursor: not-allowed; }
     .selected { background-color: gold; }
   </style>
-</head>
-<body>
-  <h2>좌석 예약 시스템</h2>
-  <div id="seat-container"></div>
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.7.1/firebase-app.js";
+    import { getAuth, signInWithPopup, GoogleAuthProvider, signOut } from "https://www.gstatic.com/firebasejs/11.7.1/firebase-auth.js";
 
-  <div id="form-area" style="margin-top: 30px;">
-    <h3>예약 정보 입력</h3>
-    <label>사용자 ID: <input type="number" id="user-id" value="1"></label><br><br>
-    <label>시작 시간: <input type="datetime-local" id="start-time"></label><br><br>
-    <label>종료 시간: <input type="datetime-local" id="end-time"></label><br><br>
-    <button onclick="submitReservation()">예약하기</button>
-    <p id="result-message"></p>
-  </div>
+    const firebaseConfig = {
+      apiKey: "AIzaSyCTX4qEpj8kHbjc-M71xd6Hh0QMnnrfgS0",
+      authDomain: "seat-reservation-6f3e0.firebaseapp.com",
+      projectId: "seat-reservation-6f3e0",
+      storageBucket: "seat-reservation-6f3e0.firebasestorage.app",
+      messagingSenderId: "731975354847",
+      appId: "1:731975354847:web:1c46bdb749b8a17a415c6a",
+      measurementId: "G-QFJF4H09KE"
+    };
 
-  <script>
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth();
+    const provider = new GoogleAuthProvider();
+
+    let currentUserId = null;
     let selectedSeatId = null;
+    let userToken = null;
+
+    window.loginWithGoogle = async () => {
+      try {
+        const result = await signInWithPopup(auth, provider);
+        const user = result.user;
+        userToken = await user.getIdToken();
+        document.getElementById("login-message").innerText = `${user.displayName}님 로그인 성공`;
+        document.getElementById("form-area").style.display = "block";
+        document.getElementById("my-reservations").style.display = "block";
+
+        // 서버에 사용자 정보 등록 요청
+        const res = await fetch("http://localhost:5000/api/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: "Bearer " + userToken },
+          body: JSON.stringify({ email: user.email, name: user.displayName })
+        });
+        const resultData = await res.json();
+        currentUserId = resultData.id;
+
+        await loadSeats();
+      } catch (err) {
+        console.error(err);
+        document.getElementById("login-message").innerText = "로그인 실패";
+      }
+    };
 
     async function loadSeats() {
       const res = await fetch("http://localhost:5000/api/seats");
@@ -46,19 +76,17 @@
     }
 
     function selectSeat(id, element) {
-      // Reset all
       document.querySelectorAll(".seat").forEach(s => s.classList.remove("selected"));
       element.classList.add("selected");
       selectedSeatId = id;
     }
 
-    async function submitReservation() {
-      const userId = document.getElementById("user-id").value;
+    window.submitReservation = async () => {
       const startTime = document.getElementById("start-time").value;
       const endTime = document.getElementById("end-time").value;
       const message = document.getElementById("result-message");
 
-      if (!selectedSeatId || !userId || !startTime || !endTime) {
+      if (!selectedSeatId || !currentUserId || !startTime || !endTime) {
         message.innerText = "모든 값을 입력하고 좌석을 선택하세요.";
         return;
       }
@@ -67,7 +95,7 @@
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          user_id: parseInt(userId),
+          user_id: currentUserId,
           seat_id: selectedSeatId,
           start_time: startTime,
           end_time: endTime
@@ -76,10 +104,58 @@
 
       const result = await res.json();
       message.innerText = result.message || result.error;
-      await loadSeats();  // UI 갱신
-    }
+      await loadSeats();
+    };
 
-    loadSeats(); // 페이지 로드 시 좌석 불러오기
+    window.loadMyReservations = async () => {
+      const res = await fetch(`http://localhost:5000/api/user/${currentUserId}/reservations`);
+      const reservations = await res.json();
+
+      const table = document.getElementById("reservation-table");
+      const tbody = table.querySelector("tbody");
+      tbody.innerHTML = "";
+      reservations.forEach(r => {
+        const row = `<tr>
+          <td>${r.id}</td>
+          <td>${r.seat_id}</td>
+          <td>${r.start_time}</td>
+          <td>${r.end_time}</td>
+          <td>${r.status}</td>
+        </tr>`;
+        tbody.innerHTML += row;
+      });
+      table.style.display = "table";
+    };
   </script>
+</head>
+<body>
+  <h2>Firebase 인증 좌석 예약 시스템</h2>
+
+  <div id="login-area">
+    <h3>로그인</h3>
+    <button onclick="loginWithGoogle()">Google로 로그인</button>
+    <p id="login-message"></p>
+  </div>
+
+  <div id="seat-container"></div>
+
+  <div id="form-area" style="margin-top: 30px; display: none;">
+    <h3>예약 정보 입력</h3>
+    <label>시작 시간: <input type="datetime-local" id="start-time"></label><br><br>
+    <label>종료 시간: <input type="datetime-local" id="end-time"></label><br><br>
+    <button onclick="submitReservation()">예약하기</button>
+    <p id="result-message"></p>
+  </div>
+
+  <div id="my-reservations" style="margin-top: 30px; display: none;">
+    <h3>내 예약 목록</h3>
+    <button onclick="loadMyReservations()">내 예약 보기</button>
+    <table border="1" id="reservation-table" style="margin-top: 10px; display:none;">
+      <thead>
+        <tr><th>ID</th><th>좌석</th><th>시작</th><th>종료</th><th>상태</th></tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
 </body>
 </html>

@@ -1,161 +1,226 @@
+
 <!DOCTYPE html>
 <html lang="ko">
 <head>
   <meta charset="UTF-8">
-  <title>Firebase 인증 좌석 예약 시스템</title>
+  <title>좌석 예약 시스템 (Flatpickr 적용)</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
   <style>
-    body { font-family: Arial, sans-serif; padding: 20px; }
-    .seat { display: inline-block; width: 60px; height: 60px; margin: 5px; text-align: center;
-            line-height: 60px; border-radius: 10px; cursor: pointer; font-weight: bold; }
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+      background: #f8f9fa;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+    }
+    .container {
+      background: white;
+      padding: 40px;
+      border-radius: 12px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+      width: 90%;
+      max-width: 600px;
+      text-align: center;
+    }
+    .seat {
+      display: inline-block;
+      width: 50px;
+      height: 50px;
+      margin: 5px;
+      text-align: center;
+      line-height: 50px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: bold;
+    }
     .available { background-color: lightgreen; }
     .reserved { background-color: tomato; cursor: not-allowed; }
     .selected { background-color: gold; }
+    input, button {
+      margin: 5px 0;
+      padding: 8px;
+      width: 80%;
+      max-width: 300px;
+      border-radius: 5px;
+      border: 1px solid #ccc;
+    }
+    button {
+      background-color: #007bff;
+      color: white;
+      border: none;
+      cursor: pointer;
+    }
+    button:hover {
+      background-color: #0056b3;
+    }
+    #reservation-table {
+      margin: 10px auto;
+      width: 100%;
+      border-collapse: collapse;
+    }
+    #reservation-table th, #reservation-table td {
+      padding: 6px;
+      border: 1px solid #ddd;
+    }
   </style>
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.7.1/firebase-app.js";
-    import { getAuth, signInWithPopup, GoogleAuthProvider, signOut } from "https://www.gstatic.com/firebasejs/11.7.1/firebase-auth.js";
-
-    const firebaseConfig = {
-      apiKey: "AIzaSyCTX4qEpj8kHbjc-M71xd6Hh0QMnnrfgS0",
-      authDomain: "seat-reservation-6f3e0.firebaseapp.com",
-      projectId: "seat-reservation-6f3e0",
-      storageBucket: "seat-reservation-6f3e0.firebasestorage.app",
-      messagingSenderId: "731975354847",
-      appId: "1:731975354847:web:1c46bdb749b8a17a415c6a",
-      measurementId: "G-QFJF4H09KE"
-    };
-
-    const app = initializeApp(firebaseConfig);
-    const auth = getAuth();
-    const provider = new GoogleAuthProvider();
-
-    let currentUserId = null;
-    let selectedSeatId = null;
-    let userToken = null;
-
-    window.loginWithGoogle = async () => {
-      try {
-        const result = await signInWithPopup(auth, provider);
-        const user = result.user;
-        userToken = await user.getIdToken();
-        document.getElementById("login-message").innerText = `${user.displayName}님 로그인 성공`;
-        document.getElementById("form-area").style.display = "block";
-        document.getElementById("my-reservations").style.display = "block";
-
-        // 서버에 사용자 정보 등록 요청
-        const res = await fetch("http://localhost:5000/api/login", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Authorization: "Bearer " + userToken },
-          body: JSON.stringify({ email: user.email, name: user.displayName })
-        });
-        const resultData = await res.json();
-        currentUserId = resultData.id;
-
-        await loadSeats();
-      } catch (err) {
-        console.error(err);
-        document.getElementById("login-message").innerText = "로그인 실패";
-      }
-    };
-
-    async function loadSeats() {
-      const res = await fetch("http://localhost:5000/api/seats");
-      const seats = await res.json();
-      const container = document.getElementById("seat-container");
-      container.innerHTML = "";
-
-      seats.forEach(seat => {
-        const div = document.createElement("div");
-        div.className = "seat " + seat.status;
-        div.innerText = seat.id;
-        if (seat.status === "available") {
-          div.onclick = () => selectSeat(seat.id, div);
-        }
-        container.appendChild(div);
-      });
-    }
-
-    function selectSeat(id, element) {
-      document.querySelectorAll(".seat").forEach(s => s.classList.remove("selected"));
-      element.classList.add("selected");
-      selectedSeatId = id;
-    }
-
-    window.submitReservation = async () => {
-      const startTime = document.getElementById("start-time").value;
-      const endTime = document.getElementById("end-time").value;
-      const message = document.getElementById("result-message");
-
-      if (!selectedSeatId || !currentUserId || !startTime || !endTime) {
-        message.innerText = "모든 값을 입력하고 좌석을 선택하세요.";
-        return;
-      }
-
-      const res = await fetch("http://localhost:5000/api/reserve", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          user_id: currentUserId,
-          seat_id: selectedSeatId,
-          start_time: startTime,
-          end_time: endTime
-        })
-      });
-
-      const result = await res.json();
-      message.innerText = result.message || result.error;
-      await loadSeats();
-    };
-
-    window.loadMyReservations = async () => {
-      const res = await fetch(`http://localhost:5000/api/user/${currentUserId}/reservations`);
-      const reservations = await res.json();
-
-      const table = document.getElementById("reservation-table");
-      const tbody = table.querySelector("tbody");
-      tbody.innerHTML = "";
-      reservations.forEach(r => {
-        const row = `<tr>
-          <td>${r.id}</td>
-          <td>${r.seat_id}</td>
-          <td>${r.start_time}</td>
-          <td>${r.end_time}</td>
-          <td>${r.status}</td>
-        </tr>`;
-        tbody.innerHTML += row;
-      });
-      table.style.display = "table";
-    };
-  </script>
+  <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 </head>
 <body>
-  <h2>Firebase 인증 좌석 예약 시스템</h2>
-
+<div class="container">
+  <h2>좌석 예약 시스템</h2>
   <div id="login-area">
     <h3>로그인</h3>
     <button onclick="loginWithGoogle()">Google로 로그인</button>
     <p id="login-message"></p>
   </div>
-
-  <div id="seat-container"></div>
-
-  <div id="form-area" style="margin-top: 30px; display: none;">
-    <h3>예약 정보 입력</h3>
-    <label>시작 시간: <input type="datetime-local" id="start-time"></label><br><br>
-    <label>종료 시간: <input type="datetime-local" id="end-time"></label><br><br>
-    <button onclick="submitReservation()">예약하기</button>
-    <p id="result-message"></p>
+  <div id="main-area" style="display:none;">
+    <div id="seat-container"></div>
+    <div id="form-area">
+      <h3>예약 정보 입력</h3>
+      <input id="start-time" type="text" placeholder="시작 시간">
+      <input id="end-time" type="text" placeholder="종료 시간">
+      <button onclick="submitReservation()">예약하기</button>
+      <p id="result-message"></p>
+    </div>
+    <div id="my-reservations">
+      <h3>내 예약 목록</h3>
+      <button onclick="loadMyReservations()">내 예약 보기</button>
+      <table id="reservation-table" style="display:none;">
+        <thead><tr><th>ID</th><th>좌석</th><th>시작</th><th>종료</th><th>상태</th><th>취소</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
   </div>
+</div>
 
-  <div id="my-reservations" style="margin-top: 30px; display: none;">
-    <h3>내 예약 목록</h3>
-    <button onclick="loadMyReservations()">내 예약 보기</button>
-    <table border="1" id="reservation-table" style="margin-top: 10px; display:none;">
-      <thead>
-        <tr><th>ID</th><th>좌석</th><th>시작</th><th>종료</th><th>상태</th></tr>
-      </thead>
-      <tbody></tbody>
-    </table>
-  </div>
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/11.7.1/firebase-app.js";
+import { getAuth, signInWithPopup, GoogleAuthProvider } from "https://www.gstatic.com/firebasejs/11.7.1/firebase-auth.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyCTX4qEpj8kHbjc-M71xd6Hh0QMnnrfgS0",
+  authDomain: "seat-reservation-6f3e0.firebaseapp.com",
+  projectId: "seat-reservation-6f3e0",
+  storageBucket: "seat-reservation-6f3e0.firebasestorage.app",
+  messagingSenderId: "731975354847",
+  appId: "1:731975354847:web:1c46bdb749b8a17a415c6a"
+};
+
+initializeApp(firebaseConfig);
+const auth = getAuth();
+const provider = new GoogleAuthProvider();
+
+let currentUserId = null;
+let selectedSeatId = null;
+
+flatpickr("#start-time", {
+  enableTime: true,
+  dateFormat: "Y-m-d H:i",
+  time_24hr: true,
+  minuteIncrement: 30,
+  minDate: new Date(),
+});
+
+flatpickr("#end-time", {
+  enableTime: true,
+  dateFormat: "Y-m-d H:i",
+  time_24hr: true,
+  minuteIncrement: 30,
+  minDate: new Date(),
+});
+
+window.loginWithGoogle = async () => {
+  const result = await signInWithPopup(auth, provider);
+  const user = result.user;
+  const idToken = await user.getIdToken();
+  const res = await fetch("http://localhost:5000/api/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: "Bearer " + idToken },
+    body: JSON.stringify({ email: user.email, name: user.displayName })
+  });
+  const data = await res.json();
+  currentUserId = data.id;
+  document.getElementById("login-area").style.display = "none";
+  document.getElementById("main-area").style.display = "block";
+  document.getElementById("login-message").innerText = `${data.name}님 환영합니다!`;
+  await loadSeats();
+};
+
+async function loadSeats() {
+  const res = await fetch("http://localhost:5000/api/seats");
+  const seats = await res.json();
+  const container = document.getElementById("seat-container");
+  container.innerHTML = "";
+  seats.forEach(seat => {
+    const div = document.createElement("div");
+    div.className = "seat " + seat.status;
+    div.innerText = seat.id;
+    if (seat.status === "available") {
+      div.onclick = () => selectSeat(seat.id, div);
+    }
+    container.appendChild(div);
+  });
+}
+
+function selectSeat(id, element) {
+  document.querySelectorAll(".seat").forEach(s => s.classList.remove("selected"));
+  element.classList.add("selected");
+  selectedSeatId = id;
+}
+
+window.submitReservation = async () => {
+  const startTime = document.getElementById("start-time").value;
+  const endTime = document.getElementById("end-time").value;
+  const message = document.getElementById("result-message");
+
+  const now = new Date();
+  const start = new Date(startTime);
+  const end = new Date(endTime);
+  if (!selectedSeatId || !currentUserId || !startTime || !endTime) {
+    message.innerText = "모든 값을 입력하고 좌석을 선택하세요.";
+    return;
+  }
+  if (start < now || end <= start) {
+    message.innerText = "유효한 미래 시간을 선택해주세요.";
+    return;
+  }
+
+  const res = await fetch("http://localhost:5000/api/reserve", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ user_id: currentUserId, seat_id: selectedSeatId, start_time: startTime, end_time: endTime })
+  });
+  const result = await res.json();
+  message.innerText = result.message || result.error;
+  await loadSeats();
+};
+
+window.cancelReservation = async (reservationId) => {
+  const res = await fetch("http://localhost:5000/api/cancel", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ reservation_id: reservationId })
+  });
+  const result = await res.json();
+  alert(result.message || result.error);
+  await loadSeats();
+  await loadMyReservations();
+};
+
+window.loadMyReservations = async () => {
+  const res = await fetch(`http://localhost:5000/api/user/${currentUserId}/reservations`);
+  const reservations = await res.json();
+  const tbody = document.querySelector("#reservation-table tbody");
+  tbody.innerHTML = reservations.map(r => `
+    <tr>
+      <td>${r.id}</td><td>${r.seat_id}</td><td>${r.start_time}</td><td>${r.end_time}</td><td>${r.status}</td>
+      <td>${r.status === 'reserved' ? `<button onclick="cancelReservation(${r.id})">취소</button>` : ''}</td>
+    </tr>`).join('');
+  document.getElementById("reservation-table").style.display = "table";
+};
+</script>
 </body>
 </html>

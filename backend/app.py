@@ -1,7 +1,8 @@
 from flask import Flask, jsonify
 from flask_cors import CORS
-from extensions import db   # ← 여기로 이동
+from extensions import db
 import os
+from flask import Flask, redirect
 
 # Flask 앱 생성
 app = Flask(__name__)
@@ -17,8 +18,8 @@ db.init_app(app)  # ← 여기서 db와 app을 연결
 
 # 테스트 라우트
 @app.route('/')
-def home():
-    return jsonify({"message": "Hello from Seat Reservation System!"})
+def root():
+    return redirect("/frontend")
 
 # 모델 및 라우트 등록
 from models import user, seat, reservation
